@@ -18,7 +18,7 @@ modification time of an archived file, will be the time it was downloaded.
 
 Usage:
 
-  $namesh
+  nar.sh
 
       --listonly --source=[USER[:PASSWORD]@]SERVER --target=FOLDER
       --listonly [USER[:PASSWORD]@]SERVER --target=FOLDER

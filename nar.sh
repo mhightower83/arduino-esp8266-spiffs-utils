@@ -186,33 +186,32 @@ logError() {
   fi
 }
 
-# # http://mywiki.wooledge.org/BashFAQ/002
-# # https://stackoverflow.com/questions/3811345/how-to-pass-all-arguments-passed-to-my-bash-script-to-a-function-of-mine/3816747
-# runcurl() { curl -s "$@"; }
-# runcmd() {
-#   local _rc _result
-#   _result=$(
-#     { stdout=$( "$@" ); returncode=$?; } 2>&1
-#     printf "this is the separator"
-#     printf "%s\n" "$stdout"
-#     exit "$returncode"
-#   )
-#   _rc=$?
-#
-#   cmd_out=${_result#*this is the separator}
-#   cmd_err=${_result%this is the separator*}
-#   if [[ $_rc -ne 0 ]]; then
-#     logError "runcmd failed with exit code ${_rc}: $@\n${cmd_err}"
-#   fi
-#   return $_rc
-# }
+# http://mywiki.wooledge.org/BashFAQ/002
+# https://stackoverflow.com/questions/3811345/how-to-pass-all-arguments-passed-to-my-bash-script-to-a-function-of-mine/3816747
+runcurl() { curl -s "$@"; }
+runcmd() {
+  local _rc _result
+  _result=$(
+    { stdout=$( "$@" ); returncode=$?; } 2>&1
+    printf "this is the separator"
+    printf "%s\n" "$stdout"
+    exit "$returncode"
+  )
+  _rc=$?
+
+  cmd_out=${_result#*this is the separator}
+  cmd_err=${_result%this is the separator*}
+  if [[ $_rc -ne 0 ]]; then
+    logError "runcmd failed with exit code ${_rc}: $@\n${cmd_err}"
+  fi
+  return $_rc
+}
 
 buildHttpText() {
   local _text
   _text=$( echo -n "$1" | jq -R '@uri' )
-  # Strip quotes
-  eval _text=${_text}
-  eval ${2:-text}="\${_text}"
+  # Strip quotes and set
+  eval ${2:-text}=${_text}
 }
 
 sendHttpRequest() {
@@ -491,8 +490,46 @@ fi
 
 if [[ "${argTarget:0:2}" = "~/" ]]; then
   target=~/"${argTarget#\~/}"
+  if [[ "${target:0:1}" = "~" ]]; then
+    printFolded "***" "\n"\
+      "This path expression, \"${argTarget}\", did not expand to a valid path."\
+      "Expanded form came back as \"${target}\""
+    errorExit 1
+  fi
 elif [[ "${argTarget:0:2}" = "./" ]]; then
   target="${argTarget#./}"
+elif [[ "${argTarget:0:1}" = "~" ]]; then
+  # ~~USER might be legal, however, it is more likely a typo so dissalow for now.
+  if [[ "${argTarget}" =~ ^~[^~/][^/]*/[^/].*$ ]]; then
+    eval target="${argTarget}"
+    if [[ "${target:0:1}" = "~" ]]; then
+      printFolded "***" "\n"\
+        "This path expression, \"${argTarget}\", did not expand to a valid path."\
+        "Expanded form came back as \"${target}\""
+      errorExit 1
+    fi
+    if ! [[ -d "${target%/*}" ]]; then
+      printFolded "***" "\n"\
+        "With the exception of the last level, \".../${target##*/}\"."\
+        "All of the other folders in the path expression must already exist."\
+        "Not all of these folders exist, \"${target%/*}\"."
+      errorExit 1
+    fi
+
+    printFolded "***" "\n"\
+      "This path expression method is not ready at this time."\
+      "That is ~USER/SUBDIR does not work at this time."\
+      "Please try another expression form."\
+      "Current logic would have used a path of \"${target}\"."\
+      "\n"
+    # Need to check that the directory specification is not too shallow
+  else
+    printFolded "***" "\n"\
+      "This was not a recognized path expression. Please try another."\
+      "\n"
+    errorExit 1
+  fi
+  errorExit 1 # remove this line when working
 elif [[ "${argTarget:0:1}" = "/" ]]; then
   printFolded "***" "\n"\
     "Bad directory name, \"${argTarget}\"."\

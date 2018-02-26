@@ -2,6 +2,8 @@
 
 Just one utility for now
 
+# Note, this is a work in progress (*ALPHA GRADE CODE*). There are and always will be bugs!!!
+
 ```
 ->nar.sh --help
 

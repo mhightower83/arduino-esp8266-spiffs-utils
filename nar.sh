@@ -16,44 +16,6 @@
 #
 # nar.sh
 #
-# A simple bash script to download the SPIFFS filesystem files from an
-# ESP8266 running an Arduino compatible sketch with Web Server. A UStar
-# formated archive (tar) file is created. The file names from the SPIFFS
-# filesystem will have the prefix "data.nar" added to the beginning of the
-# SPIFFS file names. If the file name does not have a leading "/", one will
-# be inserted. The last modification time of an archived file, will be the
-# time it was downloaded.
-
-
-#
-# Files that are stored:
-#
-# A jason list of files to download, downloaded from the server.
-#      ~/Downloads/${argTarget}/list
-#
-# A copy of the "http://..."" addess of the server
-#      ~/Downloads/${argTarget}/httpTarget
-#
-# A UStar formated tar file of the files downloaded from the server.
-#      ~/Downloads/${argTarget}/spiffs.[tar, tar.gz, or tgz]
-#
-
-unset targetBasePath
-#
-# If targetBasePath is not defined, the archive directory is writen at
-# present working directory.
-#
-targetBasePath="~/Downloads"
-#
-# The SPIFFS file names that go into the tar file are modified,
-# by inserting this prefix to the beginning of the filename.
-#
-tarEntryPrefix="data"
-
-#
-# Insure proper path endings, etc. for later.
-targetBasePath="${targetBasePath%/}"
-tarEntryPrefix="${tarEntryPrefix%/}"
 
 printUsage(){
   cat <<EOF
@@ -61,10 +23,10 @@ printUsage(){
 nar - Network ARchiver for Arduino ESP8266 web servers.
 
 A simple bash script to download the SPIFFS filesystem files from an ESP8266
-running an Arduino compatible sketch with Web Server. A UStar formated archive
-(tar) file is created. The file names from the SPIFFS filesystem will have the
-prefix "${tarEntryPrefix}" added to the beginning of the SPIFFS file names. If
-the file name does not have a leading "/", one will be inserted. The last
+running an Arduino compatible sketch with Web Server. And create a UStar
+formated archive (tar) file. The file names from the SPIFFS filesystem will have
+the prefix "${tarEntryPrefix}" added to the beginning of the SPIFFS file names.
+If the file name does not have a leading "/", one will be inserted. The last
 modification time of an archived file, will be the time it was downloaded.
 
 
@@ -72,53 +34,67 @@ Usage:
 
   $namesh
 
-      --listonly --source=[USER[:PASSWORD]@]SERVER --target=FOLDER
-      --listonly [USER[:PASSWORD]@]SERVER --target=FOLDER
-        ... [--update]
+    Basic command line format:
+      $namesh  <archive file name>  <Network location>  <list of files>
 
-      --source=[USER[:PASSWORD]@]SERVER] --target=FOLDER
-        [USER[:PASSWORD]@]SERVER --target=FOLDER
-      --target=FOLDER [--user=USER[:PASSWORD]]
-        ... [--anon]
-        ... [--setmode=MODE]
-        ... [--update]
-        ... [--tgz | --gzip]
+     <archive file name>  expression
+       -f=ARCHIVENAME
+      --file=ARCHIVENAME
+        ARCHIVENAME, the name of the archive file you are creating. Suggest
+        using a ".tar" extension to make it easy to identify.
+          examples:
+            -f=~/backups/spiffs-18-02-30.tar
+            --file=spiffs-18-02-30.tar
+            --file=~arduino/backups/spiffs/mydevice-18-02-30.tar
+
+     <Network location>  expression
+        [USER:PASSWORD@]SERVER
+        Specify the [USER:PASSWORD@] part, when authentication is required.
+        SERVER name would be the Network name (DNS, mDNS, ...) of the device
+        with a SPIFFS to download.
+          examples:
+            mydevice.local
+            admin:password@mydevice.local
+
+     <list of files>  expression - optional
+    --filter=REGEX
+        examples:
+          --filter="/w*"
+          --filter="/w/*.gz"
+          --filter="/w/[0-9]something.jpg"
+
+
+      --listonly
 
   Supported options:
 
-    --source=[USER[:PASSWORD]@]SERVER or just
-      [USER[:PASSWORD]@]SERVER
-      Specify the [USER[:PASSWORD]@] part, when authentication is required.
+     -f=ARCHIVENAME        or
+    --file=ARCHIVENAME
+      ARCHIVENAME, the name of the archive file you are creating. Suggest
+      using a ".tar" extension to make it easy to identify.
+
+      [USER:PASSWORD@]SERVER
+      Specify the [USER:PASSWORD@] part, when authentication is required.
       SERVER name would be the Network name (DNS, mDNS, ...) of the device
       with a SPIFFS to download.
 
-    --listonly (optional)
-      Only the list of the files available for download is create.
-      No files are download. On succes, you will find the list at
-      "${targetBasePath}/<target folder name>/list". The options requires
-      "--from".
+    --list      (optional)
+    --long
+      "--list" will only list the files that would have be placed in archive
+      file, dry run.
+      "--long" is the same as "--list"; however, has the file lengths.
 
-    --target=FOLDER
-      The name of the folder that will be created in the default directory,
-      "${targetBasePath}". This folder is used to store the
-      "list" of files and the archive, spiffs.tar, of the files
-      downloaded from the server.
-    --target=./FOLDER
-      If FOLDER has a leading "./" the folder is created in the current
-      directory. If the default diretory is not defined, as would be indicated
-      by empty quotes above, "", then a FOLDER w/o "./" will also be created
-      in the current directory.
-      If "--target=..." is the only argument it is assumed that the
-      "list" file is already in the FOLDER specified. (Possibly edited
-      down.) The files listed in "list" will be downloaded. Note you may
-      need to add the --user parameter for server authentication.
+    --filter=REGEX
+      A regular expression filter to limit the files downloaded.
+      Use with "--long to confirm what you have selected.
 
-    --user=USER[:PASSWORD] (as needed)
-      Provides authentication information when needed.
+    --replace (optional)
+      Overwrite an old backup.
 
-    --update (optional)
-      Allows reuse of an old archive directory.
-      Removes files that $namesh uses, before running.
+    --prefix=PREFIX
+      The file names from the SPIFFS filesystem will have the string PREFIX
+      added to the beginning of the SPIFFS file names.
+      The defaults is "${tarEntryPrefix}"
 
     --setmode=<access mode bits in octal> (optional)
       Defaults to 0664.
@@ -129,10 +105,8 @@ Usage:
       This option changes the owner to "spiffs" and the group to "Arduino".
       And, UID and GID are set to 0.
 
-    --tgz or  (optional)
     --gzip
-      Either will run gzip on the newly completed archive file; however,
-      --tgz the will replace the .tar.gz extension with .tgz
+      Run gzip on the newly completed archive file.
 
     --help
       This usage message.
@@ -141,14 +115,24 @@ EOF
   return 1
 }
 
+# The SPIFFS file names that go into the tar file are modified,
+# by inserting this prefix to the beginning of the filename.
+# This is a default --prefix=... can overide it.
+#
+tarEntryPrefix="data"
+
 
 namesh="${0##*/}"
 baseName="${namesh%.*}"
-unset errorExitFlag
+tmp="/tmp"
+logfile=$( printf "%q" "${tmp}/${baseName}_$(date '+%s').log" )
+tmpFile1=$( printf "%q" "${tmp}/${baseName}_$(date '+%s')Z1.txt" )
+tmpList=$( printf "%q" "${tmp}/${baseName}_$(date '+%s')_List.txt" )
 msgWidth=72
+trap "[[ -f $tmpList ]] && rm $tmpList; [[ -f $tmpFile1 ]] && rm $tmpFile1" EXIT
 
 # $1 subject, $2 text to log
-# Usage: logit "${FUNCNAME[0]}" "This did not work"
+# Usage: logit "subject" "message"
 logit() {
 #  timestamp=`date  +'%Y-%m-%d %H:%M:%S'`
   timestamp="ARG:"
@@ -159,31 +143,17 @@ logit() {
   echo "${logStr}" | sed "s\\^\\$timestamp ${1}${1:+: }\\">>$logfile
 }
 
-beginLogFile() {
-  logfile=$( printf "%q" "/tmp/${baseName}_$(date '+%s').log" )
-  if ! [[ -n "$logfile" && -f $logfile ]]; then
-    touch $logfile
-    chmod 664 $logfile
-    logit "" "-------- Started ${logfile} ---------"
-  fi
-}
-
 logError() {
-  if [[ -z ${logfile} ]]; then beginLogFile; fi
   local i trace func calledFrom
   i=0
   calledFrom="${LINENO}"
   for func in "${FUNCNAME[@]}"; do
     trace="${func}(${calledFrom})->${trace}"
-    calledFrom="${BASH_LINENO[$i]}"
     i=$(( $i + 1 ))
   done
   trace="${trace%->logError*}"
   trace="${0##*/}${trace#main}"
   logit "*** ${trace}" "${*}"
-  if [[ -z "${errorExitFlag}" ]]; then
-    errorExitFlag=1 # "${trace}: ${1}"
-  fi
 }
 
 # http://mywiki.wooledge.org/BashFAQ/002
@@ -216,7 +186,10 @@ buildHttpText() {
 
 sendHttpRequest() {
   local result rc errorMsg _targetFileSize
-  if [[ -n ${2} ]]; then
+  if [[ -z ${2} ]]; then
+    logError "File name for result missing."
+    return 1
+  else
     if [[ -f ${2} ]]; then
       _targetFileSize=$( stat --printf="%s" ${2} )
     else
@@ -227,35 +200,38 @@ sendHttpRequest() {
           exit $rc2
       )
     rc=$?
+    orc=$rc
+    if [[ $rc -eq 0 ]]; then
+      if [[ ${#errorMsg} -ne 0 ]] &&
+         [[ "${errorMsg/Enter host password/}" != "${errorMsg}" ]]; then
+          printFolded "***" "\nFailed: Remote host password required."
+          rc=250
+      elif [[ $( stat --printf="%s" ${2} ) -eq ${_targetFileSize} ]]; then
+        if [[ -z ${argDebug} ]]; then
+          rc=251
+          printFolded "***" "\n"\
+            "Failed: curl returned a null response on success."\
+            "This is a common response for authentication failure."\
+            "Check user name and password."
+          return $rc
+        fi
+        logError "curl returned a null response on success."
+        logError "Check user name and password."
+      fi
+    fi
     if [[ $rc -ne 0 ]]; then
       if [[ -z ${argDebug} ]]; then
-        if [[ $rc -eq 6 ]] || [[ $rc -eq 7 ]]; then
+        if [[ $rc -eq 6 ]] || [[ $rc -eq 7 ]] || [[ $rc -ge 250 ]]; then
           echo -e "\n*** Error: ${errorMsg}"
           return $rc
         fi
       fi
       logError "Sent http Request: $httprequest"
       logError "cmd=curl -sS $1 \"${httprequest}\""
-      logError "Exit code: $rc"
+      logError "Exit code: $orc"
       logError "Error Msg: ${errorMsg}"
       return $rc
     fi
-    if [[ $( stat --printf="%s" ${2} ) -eq ${_targetFileSize} ]]; then
-      if [[ -z ${argDebug} ]]; then
-        echo -e "\n*** Error: curl returned a null response on success." \
-                "\n*** This is a common response for authentication failure." \
-                "\n*** Check user name and password."
-        return 100
-      fi
-      logError "Sent http Request: $httprequest"
-      logError "cmd=curl -sS $1 \"${httprequest}\""
-      logError "curl returned a null response on success."
-      logError "Check user name and password."
-      return 100
-    fi
-  else
-    logError "File name for result missing."
-    return 1
   fi
   return 0
 }
@@ -268,7 +244,7 @@ validPosixName() {
   return 1
 }
 
-# TODO Expand list of valid characters
+# Yep just about anything can go into a linux filesystem name.
 validLinuxFilter="[^\0]+$"
 validLinuxPath() {
   if [[ "${1}" =~ ${validLinuxFilter} ]]; then
@@ -297,7 +273,7 @@ validOctalNumber() {
 
 getList() {
   httprequest="${httpTarget}/edit?list"
-  sendHttpRequest "--user ${1}" "${2}"
+  sendHttpRequest "${1:+--user }${1}" "${2}"
   rc=$?
   return $rc
 }
@@ -305,7 +281,7 @@ getList() {
 downloadFile() {
   buildHttpText "${remoteFileName}" text
   httprequest="${httpTarget}/edit?download=${text}"
-  sendHttpRequest "--user ${1}" "$2"
+  sendHttpRequest "${1:+--user }${1}" "$2"
   rc=$?
   return $rc
 }
@@ -331,7 +307,7 @@ printFolded() {
 
 make_spiffsNames() {
   local IFS=$'\n'
-  spiffsNames=( `cat ${listFileName} | jq -r '.[] | select(.type=="file") | .name,.size'` )
+  spiffsNames=( `cat ${tmpList} | jq -r '.[] | select(.type=="file") | .name,.size'` )
 }
 
 # tarPrintOctal value fieldWidth
@@ -340,7 +316,7 @@ tarPrintOctal() {
   if [[ ${fieldWidth} -ne 0 ]]; then
     fieldWidth=$(( ${fieldWidth} - 1 ));
   fi
-  printf "%.*o\0" ${fieldWidth} ${1} >>${tarFileName}
+  printf "%.*o\0" ${fieldWidth} ${1} >>"${tarFileName}"
 }
 
 # Write a tar Header at the end of the specified file.
@@ -356,14 +332,15 @@ tarPrintOctal() {
 #   tarHdrOffset
 #
 # Based on information from: https://en.wikipedia.org/wiki/Tar_(computing)
+# and https://www.freebsd.org/cgi/man.cgi?query=tar&apropos=0&sektion=5&manpath=FreeBSD+7.0-RELEASE&arch=default&format=html
 tarWriteHeader() {
   local checksum
-  if ! [[ -f ${tarFileName} ]]; then  errorExit 254; fi
+  if ! [[ -f "${tarFileName}" ]]; then  errorExit 254; fi
   # Header should always start on a 512 byte boundary
-  truncate -c -s %512 ${tarFileName}
-  tarHdrOffset=$( stat --printf="%s" ${tarFileName} )
-  printf "%s" "${fileName}" >>${tarFileName}
-  truncate -c -s $(( ${tarHdrOffset} + 100 )) ${tarFileName}
+  truncate -c -s %512 "${tarFileName}"
+  tarHdrOffset=$( stat --printf="%s" "${tarFileName}" )
+  printf "%s" "${fileName}" >>"${tarFileName}"
+  truncate -c -s $(( ${tarHdrOffset} + 100 )) "${tarFileName}"
   tarPrintOctal ${fileMode:-0664} 8
   tarPrintOctal ${userID:-${EUID}} 8
   tarPrintOctal ${groupID:-${GROUPS}} 8
@@ -371,31 +348,35 @@ tarWriteHeader() {
   # Last modification time, use now.
   tarPrintOctal $(date +'%s') 12
   # Checksum field needs blanks for calculating checksum.
-  printf "%8.s" "">>${tarFileName}
+  printf "%8.s" "">>"${tarFileName}"
   # Link indicator (file type)
-  printf "0" >>${tarFileName}
+  printf "0" >>"${tarFileName}"
   # UStar indicator and Version
   # Every reference I have seen says the version should be "00"
   # Thus printf "ustar\0%s" "00" gives the , a bit tricky
   # However, gnu tar is using "utar  \0" (spaces).
   # I am tried "00" and gnu tar did not complain.
-  truncate -c -s $(( ${tarHdrOffset} + 257 )) ${tarFileName}
-#  printf "ustar\0%s" "00" >>${tarFileName}
-  printf "ustar  \0" >>${tarFileName}
+  truncate -c -s $(( ${tarHdrOffset} + 257 )) "${tarFileName}"
+  if [[ -n "$argLikeGnuTar" ]]; then
+    # This is like GNU tar, pre-Posix
+    printf "ustar  \0" >>"${tarFileName}"
+  else
+    printf "ustar\0%s" "00" >>"${tarFileName}"
+  fi
   # User Name field 32 bytes
-  truncate -c -s $(( ${tarHdrOffset} + 265 )) ${tarFileName}
-  printf "%s" ${userName:-${USER}} >>${tarFileName}
+  truncate -c -s $(( ${tarHdrOffset} + 265 )) "${tarFileName}"
+  printf "%s" ${userName:-${USER}} >>"${tarFileName}"
   # Group name field 32 bytes
-  truncate -c -s $(( ${tarHdrOffset} + 297 )) ${tarFileName}
-  printf "%s" ${groupName:-`id -gn ${USER}`} >>${tarFileName}
-  truncate -c -s %512 ${tarFileName}
+  truncate -c -s $(( ${tarHdrOffset} + 297 )) "${tarFileName}"
+  printf "%s" ${groupName:-`id -gn ${USER}`} >>"${tarFileName}"
+  truncate -c -s %512 "${tarFileName}"
   # Now compute checksum and patch header
   checksum=$( dd status=none iflag=skip_bytes,count_bytes \
-                skip=${tarHdrOffset} count=512 if=${tarFileName} | sum -s )
+                skip=${tarHdrOffset} count=512 if="${tarFileName}" | sum -s )
   printf "%6.6o\0 " ${checksum/ */} | \
   dd conv=nocreat,notrunc status=none \
     iflag=count_bytes count=8 \
-    oflag=seek_bytes seek=$(( ${tarHdrOffset} + 148 )) of=${tarFileName}
+    oflag=seek_bytes seek=$(( ${tarHdrOffset} + 148 )) of="${tarFileName}"
 }
 
 errorExit() {
@@ -407,53 +388,70 @@ errorExit() {
   exit ${1:-255}
 }
 
+
 unset httpTarget
+unset argSource argTarget argHelp argListOnly argLong argError argUser \
+  argGzip argTmp argFilter argMode argAnon argReplace userName groupName \
+  userID groupID argDebug argLikeGnuTar
 
-unset argFrom argTarget argHelp argListOnly argError argUser argGzip \
-      argMode argAnon argUpdate userName groupName userID groupID argDebug
-
+argBlockSize=2048
 
 # --user@([ =])*) argUser="${1/[ =]/ }"; ;;
 shopt -s extglob
 while [[ -n ${1} ]]; do
   case "${1,,}" in
-    --listonly)      argListOnly=1; ;;
-    --target?(=*))   if [[ "$1" = "--target" ]]; then shift; fi
-                     argTarget=${1#--target=}; ;;
-    --user?(=*))     if [[ "$1" = "--user" ]]; then shift; fi
-                     argUser="${1#--user=}"; ;;
-    --source?(=*@*)) if [[ "$1" = "--source" ]]; then shift; fi
-                     ;&
-      *@*)           argUser="${1#--source=}"
-                     argUser="${argUser/@*/}"
-                     argFrom="${1/*@/}"
-                     if [[ "$argUser" = "$argFrom" ]]; then
-                       unset argUser
-                     fi; ;;
-    --setmode?(=*))  if [[ "$1" = "--setmode" ]]; then shift; fi
-                     argMode=${1#--setmode=}; ;;
-    --anon*)         userName="spiffs"; groupName="Arduino"
-                     userID=0; groupID=0; ;;
-    --tgz)           argGzip="tgz"; ;;
-    --gzip)          argGzip="gz"; ;;
-    --update)        argUpdate=1; ;;
-    --debug)         argDebug=1; ;;
-    --help)          argHelp=1; ;;
+    --list)           argListOnly=1; ;;
+    --long)           argLong=1; argListOnly=1; ;;
+     -f?(=*))         if [[ "$1" = "-f" ]]; then shift; fi
+                      argTarget="${1#-f=}"; ;;
+    --file?(=*))      if [[ "$1" = "--file" ]]; then shift; fi
+                      argTarget="${1#--file=}"; ;;
+    --user?(=*))      if [[ "$1" = "--user" ]]; then shift; fi
+                      argUser="${1#--user=}"; ;;
+    --source?(=*@*))  if [[ "$1" = "--source" ]]; then shift; fi
+                      ;&
+      *@*)            argTmp="${1#--source=}"
+                      argUser="${argTmp/@*/}"
+                      argSource="${argTmp/*@/}"
+                      if [[ "$argUser" = "$argTmp" ]]; then
+                        unset argUser
+                      fi; ;;
+    --prefix?(=*))    if [[ "$1" = "--prefix" ]]; then shift; fi
+                      tarEntryPrefix="${1#--prefix=}"; ;;
+    --filter?(=*))    if [[ "$1" = "--filter" ]]; then shift; fi
+                      argFilter="${1#--filter=}"; ;;
+    --setmode?(=*))   if [[ "$1" = "--setmode" ]]; then shift; fi
+                      argMode="${1#--setmode=}"; ;;
+    --anon*)          userName="spiffs"; groupName="Arduino"
+                      userID=0; groupID=0; ;;
+    --blocksize?(*=)) if [[ "$1" = "--blocksize" ]]; then shift; fi
+                      argBlockSize=$(( ${1#--blocksize=} * 512 )); ;;
+    --likegnu*)       argLikeGnuTar=1; argBlockSize=10240; ;;
+    --gzip)           argGzip="gz"; ;;
+    --replace)        argReplace=1; ;;
+    --debug)          argDebug=1; ;;
+    --help)           argHelp=1; ;;
     *) argHelp=1; argError="${argError}\nUnknown option: \"${1}\""; ;;
   esac
   if [[ -n ${1} ]]; then shift; fi
 done
 
-echo ""
+#+ echo ""
+
+logVarError() {
+  local str
+  for i in "$@"; do
+    eval str="${i}=\'\${${i}}\'"
+    logError "$str"
+  done
+}
 
 if [[ -n ${argDebug} ]]; then
-  logError \
-    "argUser=$argUser\n"\
-    "argFrom=$argFrom\n"\
-    "argMode=$argMode\n"\
-    "argTarget=$argTarget\n"\
-    "argError=$argError\n"
+  logVarError argSource argTarget argHelp argListOnly argLong argError argUser \
+   argGzip argFilter argMode argAnon argReplace userName groupName userID \
+   groupID argDebug
 fi
+
 
 #
 # Validate command line parameters
@@ -462,16 +460,35 @@ if [[ -n ${argMode} ]]; then
   if validOctalNumber "${argMode}"; then
     fileMode=0${argMode}
   else
-    argHelp=1; argError="${argError}\n--setMode parameter's value is invalid. The value should be an octal number."
+    argHelp=1; argError="${argError}\n--setmode bad value. The value should be an octal number."
   fi
 fi
 
+
+_Passwd="${argUser/*:/}"
+_User="${argUser/:*/}"
+if [[ -n ${_User} ]] && [[ ${_Passwd} = ${_User} ]]; then
+  unset _Passwd
+  echo -e -n "\nEnter host password for user '${_User}': " >&2
+  read _Passwd
+  echo -e -n "\r\e[1A\e[K" >&2 # CR, up 1 line, clear to end of line, stay
+  argUser="${_User}:${_Passwd}"
+fi
+unset _Passwd _User
+if [[ -n ${argUser} ]] && [[ "${argUser/:/}" = "$argUser" ]]; then
+  argHelp=1; argError="${argError}\nPassword required, when specifing USER."
+fi
+
 if [[ -z ${argTarget} ]] && [[ -z ${argHelp} ]]; then
-  argHelp=1; argError="${argError}\n--target parameter required."
+  argHelp=1; argError="${argError}\n--file parameter required."
 fi
-if [[ -n ${argListOnly} ]] && [[ -z ${argFrom} ]]; then
-  argHelp=1; argError="${argError}\n--from parameter required, when using --listonly."
+if [[ -n ${argListOnly} ]] && [[ -z ${argSource} ]]; then
+  argHelp=1; argError="${argError}\n--source parameter required, when using --list."
 fi
+
+# if [[ $argBlockSize -gt 10240 ]]; then
+#   argHelp=1; argError="${argError}\n--blocksize exceeds the maximum of 20, 512 byte records."
+# fi
 
 if [[ -n ${argHelp} ]]; then
   if [[ -n ${argError} ]]; then
@@ -481,339 +498,284 @@ if [[ -n ${argHelp} ]]; then
   errorExit 1
 fi
 
-
+#
+# Insure proper path endings, etc. for later.
+tarEntryPrefix="${tarEntryPrefix%/}"
 
 if ! validLinuxPath "${argTarget}"; then
-  printFolded "***" "\nBad directory name, \"${argTarget}\"\n"
+  printFolded "***" "\nBad path/name, \"${argTarget}\"\n"
   errorExit 1
 fi
 
-if [[ "${argTarget:0:2}" = "~/" ]]; then
-  target=~/"${argTarget#\~/}"
-  if [[ "${target:0:1}" = "~" ]]; then
+# if [[ "${argTarget:0:2}" = "~/" ]]; then
+if [[ "${argTarget:0:1}" = "~" ]]; then
+  eval target="${argTarget}"
+#  target=~/"${argTarget#\~/}"
+  if [[ "${tarFileName:0:1}" = "~" ]]; then
     printFolded "***" "\n"\
       "This path expression, \"${argTarget}\", did not expand to a valid path."\
-      "Expanded form came back as \"${target}\""
+      "Expanded form came back as \"${tarFileName}\""\
+      "\n"
     errorExit 1
   fi
 elif [[ "${argTarget:0:2}" = "./" ]]; then
   target="${argTarget#./}"
-elif [[ "${argTarget:0:1}" = "~" ]]; then
-  # ~~USER might be legal, however, it is more likely a typo so dissalow for now.
-  if [[ "${argTarget}" =~ ^~[^~/][^/]*/[^/].*$ ]]; then
-    eval target="${argTarget}"
-    if [[ "${target:0:1}" = "~" ]]; then
-      printFolded "***" "\n"\
-        "This path expression, \"${argTarget}\", did not expand to a valid path."\
-        "Expanded form came back as \"${target}\""
-      errorExit 1
-    fi
-    if ! [[ -d "${target%/*}" ]]; then
-      printFolded "***" "\n"\
-        "With the exception of the last level, \".../${target##*/}\"."\
-        "All of the other folders in the path expression must already exist."\
-        "Not all of these folders exist, \"${target%/*}\"."
-      errorExit 1
-    fi
-
-    printFolded "***" "\n"\
-      "This path expression method is not ready at this time."\
-      "That is ~USER/SUBDIR does not work at this time."\
-      "Please try another expression form."\
-      "Current logic would have used a path of \"${target}\"."\
-      "\n"
-    # Need to check that the directory specification is not too shallow
-  else
-    printFolded "***" "\n"\
-      "This was not a recognized path expression. Please try another."\
-      "\n"
-    errorExit 1
-  fi
-  errorExit 1 # remove this line when working
+# elif [[ "${argTarget:0:1}" = "~" ]]; then
+#   # ~~USER might be legal, however, it is more likely a typo so dissalow for now.
+#   if [[ "${argTarget}" =~ ^~[^~/][^/]*/[^/].*$ ]]; then
+#     eval target="${argTarget}"
+#     if [[ "${target:0:1}" = "~" ]]; then
+#       printFolded "***" "\n"\
+#         "This path expression, \"${argTarget}\", did not expand to a valid path."\
+#         "Expanded form came back as \"${target}\""\
+#         "\n"
+#       errorExit 1
+#     fi
+#   else
+#     printFolded "***" "\n"\
+#       "This was not a recognized path expression. Please try another."\
+#       "\n"
+#     errorExit 1
+#   fi
+#
 elif [[ "${argTarget:0:1}" = "/" ]]; then
+  # For safety sake assume "/" is an accident.
   printFolded "***" "\n"\
     "Bad directory name, \"${argTarget}\"."\
-    "Cannot create directory at the root of the filesystem, \"/\"."\
-    "Please run command from the directory level you wish to create"\
+    "Cannot use file specification starting at the root of the filesystem,"\
+    "\"/\"."\
+    "Please run command from or above the directory level you wish to create"\
     "the archive directory."\
     "\n"
   errorExit 1
 else
-  unset expandedBasePath
-  if [[ -n "${targetBasePath}" ]]; then
-    if [[ "${targetBasePath:0:2}" = "~/" ]]; then
-      expandedBasePath=~/"${targetBasePath#\~/}"
-    else
-      printFolded "***" "\n"\
-        "Default targetBasePath has been changed. The value needs to be set"\
-        "to something of the form: \"~USER\", \"~USER/SUBDIR1\", \"~/Downloads\", etc."\
-        "This is more a safe guard than anything else.\n"
-      errorExit 1
-    fi
+  target="${argTarget}"
+fi
 
-    if ! [[ -d "${expandedBasePath}" ]]; then
-      echo -e "\n\n"
-      echo "The expanded base directory path \"${expandedBasePath}\","
-      echo "does not exist."
-      echo -n "Would you like to create it now (yes/no)? "
-      unset yesno
-      gotit=-1
-      for (( i=16; (i>0)&&(${gotit}<0); i-=1 )); do
-        read yesno
-        echo ""
-        case "${yesno,,}" in
-          yes) if mkdir -p "${expandedBasePath}"; then
-                 gotit=1;
-               else
-                 gotit=0
-               fi
-               ;;
-          no)  gotit=0;
-               ;;
-          *)   echo -n "Please type 'yes' or 'no': "
-               ;;
-        esac
-      done
+tarFileNameBase="${tarFileName%.*}"
+tarFileNameExt="${tarFileName##*.}"
+case "${tarFileNameExt}" in
+  tgz)   argGzip=tgz; ;;
+  tar)   unset argGzip; ;;
+  *)     echo "Please use a filename with an extension of \".tgz\" or \".tar\""
+         errorExit 1; ;;
+esac
+if [[ -n ${argGzip} ]]; then
+  tarFileName="${tarFileNameBase}.tar"
+  tarFileNameZ="${tarFileNameBase}.tgz"
+else
+  unset tarFileNameZ
+fi
+
+if [[ -f "${tarFileName}" ]]  ||
+   [[ -f "${tarFileNameZ}" ]] ||
+   [[ -f "${tarFileName}.gz"  ]]; then
+
+  if [[ -n ${argReplace} ]]; then
+    goit=1
+  else
+    echo -e "\n"\
+      "If we continue, the following existing output and intermediate files\n"\
+      "will be deleted or overwriten:\n" >&2
+    [[ -f "${tarFileName}"    ]] && echo "  ${tarFileName}" >&2
+    [[ -f "${tarFileNameZ}"   ]] && echo "  ${tarFileNameZ}" >&2
+    [[ -f "${tarFileName}.gz" ]] && echo "  ${tarFileName}.gz" >&2
+    echo -n "\nWould you like to continue (yes/no)? " >&2
+    unset yesno
+    gotit=-1
+    for (( i=12; (i>0)&&(${gotit}<0); i-=1 )); do
+      read yesno
+      case "${yesno,,}" in
+        yes) gotit=1;
+             ;;
+        no)  gotit=0;
+             ;;
+        *)   echo -n "Please type 'yes' or 'no': " >&2
+             ;;
+      esac
+    done
+    if [[ $gotit -lt 1 ]]; then
       echo ""
-      if [[ $gotit -lt 1 ]] || ! [[ -d "${expandedBasePath}" ]]; then
-        errorExit 1
-      fi
-    fi
-
-    target="${expandedBasePath}/${argTarget#/}"
-
-  else # zero ${targetBasePath}
-    # Check if PWD is root
-    if [[ "${PWD}" = "/" ]]; then
-      printFolded "***" "\n"\
-        "Current directory is at \"${PWD}\"."\
-        "Cannot create directory at the root of the filesystem, \"/\"."\
-        "Please run command from the directory level you wish to create"\
-        "the archive directory."\
-        "\n"
-      errorExit 1
-    else
-      target="${argTarget}"
+      exit 1
     fi
   fi
+  [[ -f "${tarFileName}"    ]] && ! rm "${tarFileName}"     && gotit=0
+  [[ -f "${tarFileNameZ}"   ]] && ! rm "${tarFileNameZ}"    && gotit=0
+  [[ -f "${tarFileName}.gz" ]] && ! rm "${tarFileName}.gz"  && gotit=0
+  if [[ $gotit -lt 1 ]; then
+    exit 1;
+  fi
 fi
-target_q=$( printf "%q" "${target}" )
-if [[ -z "${target}" ]]; then
-  logError \
-    "targetBasePath=${targetBasePath}\n"\
-    "argTarget=${argTarget}"
-    "expandedBasePath=${expandedBasePath}\n"\
-    "target=${target}\n"
-  printFolded "\n***" "Internal error: \"target\" not set.\n"
+
+
+
+if [[ "${tarFileName%/*}" != "${tarFileName}" ]] && ! [[ -d "${tarFileName%/*}" ]]; then
+  printFolded "***" "\n"\
+    "This path does not exist, \"${tarFileName%/*}\"."\
+    "All of the folders in the path expression must already exist."\
+    "\n"
   errorExit 1
 fi
-logError \
-  "targetBasePath=${targetBasePath}\n"\
-  "expandedBasePath=${expandedBasePath}\n"\
-  "target=${target}\n"\
-  "target_q=${target_q}\n"
-
-# errorExit 1
-
-if [[ -n ${argFrom} ]]; then
-  if validNetworkName "${argFrom}"; then
-    httpTarget="http://${argFrom}"
-  else
-    echo -e "\n*** Bad Network name, \"${argFrom}\"\n"
-    errorExit 1
-  fi
+if [[ -z "${tarFileName}" ]]; then
+  printFolded "***" "\nInternal error: \"target\" not set.\n"
+  errorExit 1
 fi
 
-#
-# Deal with target directory
-#
-if [[ -f ${target_q} ]]; then {
-  echo -e "\n*** Failed, target directory, \"${target_q}\"," \
-          "\n*** already exists as a file.\n"
-  ls -l ${target_q}
-  errorExit 1
-} elif [[ -d ${target_q} ]]  && [[ -z ${argUpdate} ]]; then {
-  if [[ -f ${target_q}/spiffs.tar ]] || [[ -f ${target_q}/spiffs.tgz ]]; then
-    echo -e "\n*** Failed, target directory, \"${target_q}\"," \
-            "\n*** already contains a SPIFFS backup.\n"
-    ls -l ${target_q}
-    errorExit 1
-  elif [[ -f ${target_q}/list ]]; then
-    if [[ -n "${argFrom}" ]]; then
-      echo -e "\nExisting download list, \"${target_q}/list\"," \
-              "\nwill be overwriten." \
-              "\n"
-      # TODO ask for confirmation
-    else
-      echo "Using download list found at \"${target_q}/list\"."
-    fi
-  fi
-} else {
-  if [[ -d ${target_q} ]]  && [[ -n ${argUpdate} ]]; then
-    #
-    # Cleanup directory, only remove our things.
-    #
-    if [[ -n ${argFrom} ]]; then
-      echo -e "Removing old backup information from:" \
-            "\n  ${target_q}"
-      if [[ -f ${target_q}/list ]]; then
-        rm ${target_q}/list
-      fi
-      if [[ -f ${target_q}/httpTarget ]]; then
-        rm ${target_q}/httpTarget
-      fi
-    else
-      echo -e "Keeping previous \"--from\" information and removing other old backup information from:" \
-            "\n  ${target_q}"
-    fi
 
-    if [[ -f ${target_q}/spiffs.tar ]]; then
-      rm ${target_q}/spiffs.tar
-    fi
-    if [[ -f ${target_q}/spiffs.tgz ]]; then
-      rm ${target_q}/spiffs.tgz
-    fi
-    if [[ -f ${target_q}/spiffs.tar.gz ]]; then
-      rm ${target_q}/spiffs.tar.gz
-    fi
-    if [[ -f ${target_q}/spiffs.tgz ]]; then
-      rm ${target_q}/spiffs.tgz
-    fi
+if [[ -n ${argSource} ]]; then
+  if validNetworkName "${argSource}"; then
+    httpTarget="http://${argSource}"
   else
-    mkdir -p ${target_q}
-    rc=$?
-    if [[ ${rc} -ne 0 ]]; then
-      echo -e "\n*** Failed, could not create target directory, \"${target_q}\".\n"
-      ls -l ${target_q}
-      errorExit ${rc}
-    fi
-    if ! [[ -d ${target_q} ]]; then
-      echo -e "\n*** Something strange happended. mkdir failed to create directory.\n"
-      ls -l ${target_q}
-      errorExit 254
-    fi
+    printFolded "***" "\nBad Network name, \"${argSource}\"\n"
+    errorExit 1
   fi
-} fi
+else
+  printFolded "***" "\n"\
+    "Missing server name."\
+    "\n"
+  errorExit 1
+fi
 
-#
-# Construct vars for with escaped filenames
-#
-listFileName=$( printf "%q" "${target}/list" )
-httpFileName=$( printf "%q" "${target}/httpTarget" )
-tarFileName=$( printf "%q" "${target}/spiffs.tar" )
+
+listFiles() {
+  local matchCount=0
+  if [[ -n ${argLong} ]]; then
+    echo -e "File names|Size\n----------|----"
+  fi
+  for (( i=0; i<${#spiffsNames[@]}; i+=2 )); do
+    if [[ -z ${argFilter} ]] || [[ "${spiffsNames[i]}" =~ ${argFilter} ]]; then
+      matchCount=$(( $matchCount + 1 ))
+      if [[ -n ${argLong} ]]; then
+        echo -e "${spiffsNames[i]}|${spiffsNames[i+1]}"
+      else
+        echo "${spiffsNames[i]}"
+      fi
+    fi
+  done
+  if [[ -n ${argFilter} ]]; then
+    echo "${matchCount} files matched filter, \"${argFilter}\""
+  fi
+}
+
+findMatchCount(){
+  local matchCount=0
+  for (( i=0; i<${#spiffsNames[@]}; i+=2 )); do
+    if [[ -z ${argFilter} ]] || [[ "${spiffsNames[i]}" =~ ${argFilter} ]]; then
+      matchCount=$(( $matchCount + 1 ))
+    fi
+  done
+  eval ${1}=${matchCount}
+}
 
 #
 # download list
 #
-if [[ -n ${httpTarget} ]]; then
-  echo -e "\nDownloading a \"list\" of files to download."
-  if getList "${argUser}" "${listFileName}"; then
-    echo -n "${httpTarget}" >${httpFileName}
-  else
-    echo -e   "*** Failed to get file list from \"${httpTarget}\"." \
-            "\n"
-    errorExit 1
-  fi
-else
-  if [[ -f ${httpFileName} ]] && [[ -f ${listFileName} ]]; then
-    httpTarget=$( cat "${target_q}/httpTarget" )
-    argFrom=${httpTarget##*/}
-  else
-    unset httpTarget response
-  fi
-fi
-
-if [[ -z ${httpTarget} ]] || ! [[ -f ${listFileName} ]]; then
-  echo -e "\n*** Cannot find previously saved information." \
-          "\n*** Run command again with the \"--from=...\" option." \
-          "\n"
-  ls -l ${target_q}
+getList "${argUser}" "${tmpList}"
+rc=$?
+if [[ $rc -ne 0 ]]; then
+  printFolded "***" "\n"\
+    "Failed to get file list from \"${httpTarget}\"."\
+    "\n"
   errorExit 1
-fi
-
-if [[ -n ${argListOnly} ]]; then
-  echo -e "\nResults saved in:" \
-          "\n  \"${target_q}\"" \
-          "\n"
-  ls -l ${target_q}
-  echo ""
-  exit 0
-fi
-
-#
-# Download files and build tar file
-#
-echo -e "\nCreating nar backup of ${argFrom}'s SPIFFS file system." \
-        "\nResults will be writen to folder: \"${target_q}\"."
-if [[ -f ${tarFileName} ]]; then
-  echo -e "\n" \
-          "\n*** Internal check failed: \"{tarFileName}\" alread exist." \
-          "\n"
-  errorExit 1
-else
-  touch ${tarFileName}
 fi
 
 # spiffsNames=( `echo -n "${response}" | jq -r '.[] | select(.type=="file") | .name'` )
 make_spiffsNames
-numOfFilesToBackup=$(( ${#spiffsNames[@]} / 2 ))
 if [[ $(( ${#spiffsNames[@]} % 2 )) -ne 0 ]]; then
-  echo -e "\n*** The list of files to backup is corrupted." \
-          "\n"
+  printFolded "***" "\nThe list of files to backup is corrupted.\n"
   errorExit 1
 fi
+
+
+#
+# Handle listonly option
+#
+if [[ -n ${argListOnly} ]]; then
+  listFiles | column -s\| -t
+  exit 0
+fi
+
+
+#D tarFileName="${target}"
+#
+# Download files and build tar file
+#
+echo -e "\nCreating nar backup of ${argSource}'s SPIFFS file system." \
+        "\nResults will be written to: \"${tarFileName}\"."
+
+touch "${tarFileName}" || errorExit 1
+
+
+findMatchCount numOfFilesToBackup
 numFilesBackedUp=0
 echo ""
 for (( i=0; i<${#spiffsNames[@]}; i+=2 )); do
-  fileName="${tarEntryPrefix}/${spiffsNames[i]#/}"
-  remoteFileName="${spiffsNames[i]}"
-  fileSize=${spiffsNames[i+1]}
-  echo -n -e "\rDownloading: $(( ${numFilesBackedUp} + 1 )) of ${numOfFilesToBackup} size ${fileSize}, name \"${spiffsNames[i]}\"\e[K"
-  tarWriteHeader
-  if downloadFile "${argUser}" "${tarFileName}"; then
-    tarFileSize=$( stat --printf="%s" ${tarFileName} )
-    estimateSize=$(( ${fileSize} + 512 + $tarHdrOffset ))
-    if [[ ${tarFileSize} -ne ${estimateSize} ]]; then
-      echo -e "\n" \
-              "\n*** Error in adding ${fileName}, \(${fileSize} bytes\) to archive file." \
-              "\n*** Actual files size does not match estimate." \
-              "\n*** Estamated file size: ${estimateSize} vs. actual tar file size: ${tarFileSize}" \
-              "\n"
-      errorExit 100
-    else
-      numFilesBackedUp=$(( ${numFilesBackedUp} + 1 ))
-    fi
-  else
-    truncate -c -s +1024 ${tarFileName} # two records of zeros
-    truncate -c -s %2048 ${tarFileName}
-    echo -e   "*** Error downloading file from ${httpTarget}" \
-            "\n*** only ${numFilesBackedUp} of ${#spiffsNames[@]} were backed up." \
+  if [[ -z ${argFilter} ]] || [[ "${spiffsNames[i]}" =~ ${argFilter} ]]; then
+    fileName="${tarEntryPrefix}/${spiffsNames[i]#/}"
+    remoteFileName="${spiffsNames[i]}"
+    fileSize=${spiffsNames[i+1]}
+    echo -n -e "\rDownloading: $(( ${numFilesBackedUp} + 1 )) of"\
+       "${numOfFilesToBackup} size ${fileSize}, name \"${spiffsNames[i]}\"\e[K"
+    tarWriteHeader
+    if downloadFile "${argUser}" "${tarFileName}"; then
+      tarFileSize=$( stat --printf="%s" "${tarFileName}" )
+      actualFileSize=$(( $tarFileSize - $tarHdrOffset - 512 ))
+      if [[ -z "$fileSize" ]]; then
+        fileSize=${actualFileSize}
+      else
+        estimateSize=$(( ${fileSize} + 512 + $tarHdrOffset ))
+        if [[ ${tarFileSize} -ne ${estimateSize} ]]; then
+          printFolded "***" "\n"\
+            "Error downloading \"${fileName}\", downloaded size is"\
+            "${actualFileSize} bytes."\
+            "List operation reported ${fileSize} bytes."\
             "\n"
-    errorExit 1
+          errorExit 100
+        fi
+      numFilesBackedUp=$(( ${numFilesBackedUp} + 1 ))
+    else
+      truncate -c -s +1024 "${tarFileName}" # two records of zeros
+      truncate -c -s %${argBlockSize} "${tarFileName}"
+      printFolded "***" "\n"\
+        "Error downloading file from ${httpTarget}"\
+        "only ${numFilesBackedUp} of ${#spiffsNames[@]} were backed up." \
+        "\n"
+      errorExit 1
+    fi
   fi
 done
-echo -e "\rSuccess downloading: ${numFilesBackedUp} of ${numOfFilesToBackup} files from ${argFrom}.\e[K"
+
+echo -e -n "\r\e[K"
+if [[ -n ${argFilter} ]]; then
+  echo -e "Using --filter=\"${argFilter}\""
+fi
+echo -e "Downloaded: ${numFilesBackedUp} of ${numOfFilesToBackup} files from ${argSource}."
 
 # For the end of the archive there should be at least two record of 512 bytes
 # of zero. The file should be expanded to an integral block size.
 # Punt
-truncate -c -s +1024 ${tarFileName} # two records of zeros
-truncate -c -s %2048 ${tarFileName}
+truncate -c -s +1024 "${tarFileName}" # two records of zeros
+truncate -c -s %${argBlockSize} "${tarFileName}"
 
+
+
+# Corner cases not handled yet
 
 if [[ -n ${argGzip} ]]; then
-  gzip ${tarFileName}
-  if [[ ${argGzip} = "tgz" ]]; then
-    mv ${tarFileName}.gz ${tarFileName/%.tar/.tgz}
-  fi
+  gzip "${tarFileName}"
+  mv ${tarFileName}.gz "${tarFileNameZ}"
 fi
 
-echo -e "\nResults saved in:" \
-        "\n  \"${target_q}\"" \
-        "\n"
-ls -l ${target_q}
-echo ""
 
+
+
+
+
+
+echo ""
+echo "Archive file \"${tarFileName}\" complete."
+echo "Size $( stat --printf="%s" "${tarFileName}" ) bytes."
+echo ""
 exit 0
 
   # # This worked for uploading a file

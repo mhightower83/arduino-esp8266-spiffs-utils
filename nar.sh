@@ -16,18 +16,25 @@
 #
 # nar.sh
 #
+# Additional applications required: curl and jq
+#   sudo apt-get install curl jq
 
+unset argError
 printUsage(){
+  if [[ -n ${argError} ]]; then
+    echo -e "${argError}\n"
+  fi
   cat <<EOF
 
-nar - Network ARchiver for Arduino ESP8266 web servers.
+nar - Network ARchiver for an Arduino ESP8266 with Web Server Running
 
-A simple bash script to download the SPIFFS filesystem files from an ESP8266
-running an Arduino compatible sketch with Web Server. And create a UStar
-formated archive (tar) file. The file names from the SPIFFS filesystem will have
-the prefix "${tarEntryPrefix}" added to the beginning of the SPIFFS file names.
-If the file name does not have a leading "/", one will be inserted. The last
-modification time of an archived file, will be the time it was downloaded.
+A simple bash script that will download files from an ESP8266 and create a tar
+formated archive file. The ESP8266 must be running a compatible Arduino sketch
+with Web Server. The archive file created is of UStar format. The file names
+from the SPIFFS filesystem will have the prefix "${tarEntryPrefix}" added to the
+beginning of the SPIFFS file names. If the file name does not have a leading
+"/", one will be inserted. The last modification time of an archived file,
+will be the time this script was started.
 
 
 Usage:
@@ -35,7 +42,7 @@ Usage:
   $namesh
 
     Basic command line format:
-      $namesh  <archive file name>  <Network location>  <list of files>
+      $namesh <archive file name> <Network location> <list of files> <optional>
 
      <archive file name>  expression
        -f=ARCHIVENAME
@@ -50,8 +57,8 @@ Usage:
      <Network location>  expression
         [USER:PASSWORD@]SERVER
         Specify the [USER:PASSWORD@] part, when authentication is required.
-        SERVER name would be the Network name (DNS, mDNS, ...) of the device
-        with a SPIFFS to download.
+        SERVER name would be the Network name (IP Address, DNS, mDNS, ...) of
+        the device with a SPIFFS to download.
           examples:
             mydevice.local
             admin:password@mydevice.local
@@ -64,29 +71,32 @@ Usage:
           --filter="/w/[0-9]something.jpg"
 
 
-      --listonly
+     <optional>
+        Additional optional parameters are shown in the Supported options list.
 
   Supported options:
 
      -f=ARCHIVENAME        or
     --file=ARCHIVENAME
       ARCHIVENAME, the name of the archive file you are creating. Suggest
-      using a ".tar" extension to make it easy to identify.
+      using a ".tar" extension to make it easy to identify. Alternatively,
+      use a ".tgz" extension and gzip will be run on the archive file, after
+      it is created.
 
       [USER:PASSWORD@]SERVER
       Specify the [USER:PASSWORD@] part, when authentication is required.
-      SERVER name would be the Network name (DNS, mDNS, ...) of the device
-      with a SPIFFS to download.
+      SERVER name would be the Network name (IP address, DNS, mDNS, ...) of
+      the device with a SPIFFS to download.
 
-    --list      (optional)
+    --list    or  (optional)
     --long
-      "--list" will only list the files that would have be placed in archive
-      file, dry run.
-      "--long" is the same as "--list"; however, has the file lengths.
+      "--list" will only list the files that would have been placed in
+      archive file, dry run.
+      "--long" is similar to "--list" with file lengths added.
 
     --filter=REGEX
       A regular expression filter to limit the files downloaded.
-      Use with "--long to confirm what you have selected.
+      Use with "--long to confirm your selection.
 
     --replace (optional)
       Overwrite an old backup.
@@ -94,10 +104,14 @@ Usage:
     --prefix=PREFIX
       The file names from the SPIFFS filesystem will have the string PREFIX
       added to the beginning of the SPIFFS file names.
-      The defaults is "${tarEntryPrefix}"
+      Defaults to "${tarEntryPrefix}"
 
     --setmode=<access mode bits in octal> (optional)
       Defaults to 0664.
+
+    --setdate=<time in seconds since 1/1/1970> (optional)
+      The timestamp information to assign to all of the files in the archive.
+      Defaults to the time the script was started.
 
     --anon  (optional)
       By default, owner and group information recorded in the tar
@@ -106,7 +120,8 @@ Usage:
       And, UID and GID are set to 0.
 
     --gzip
-      Run gzip on the newly completed archive file.
+      Run gzip on the newly completed archive file. This is an alternative
+      to using the ".tgz" extention.
 
     --help
       This usage message.
@@ -271,9 +286,16 @@ validOctalNumber() {
   return 1
 }
 
+validDecNumber() {
+  if [[ "${1}" =~ ^[0-9]+$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
 getList() {
   httprequest="${httpTarget}/edit?list"
-  sendHttpRequest "${1:+--user }${1}" "${2}"
+  sendHttpRequest "${1:+--anyauth --user }${1}" "${2}"
   rc=$?
   return $rc
 }
@@ -281,7 +303,7 @@ getList() {
 downloadFile() {
   buildHttpText "${remoteFileName}" text
   httprequest="${httpTarget}/edit?download=${text}"
-  sendHttpRequest "${1:+--user }${1}" "$2"
+  sendHttpRequest "${1:+--anyauth --user }${1}" "$2"
   rc=$?
   return $rc
 }
@@ -345,8 +367,8 @@ tarWriteHeader() {
   tarPrintOctal ${userID:-${EUID}} 8
   tarPrintOctal ${groupID:-${GROUPS}} 8
   tarPrintOctal ${fileSize} 12   # file size
-  # Last modification time, use now.
-  tarPrintOctal $(date +'%s') 12
+  # Last modification time, defaults to now.
+  tarPrintOctal ${argDate} 12
   # Checksum field needs blanks for calculating checksum.
   printf "%8.s" "">>"${tarFileName}"
   # Link indicator (file type)
@@ -392,7 +414,7 @@ errorExit() {
 unset httpTarget
 unset argSource argTarget argHelp argListOnly argLong argError argUser \
   argGzip argTmp argFilter argMode argAnon argReplace userName groupName \
-  userID groupID argDebug argLikeGnuTar
+  userID groupID argDebug argLikeGnuTar argDate
 
 argBlockSize=2048
 
@@ -422,6 +444,8 @@ while [[ -n ${1} ]]; do
                       argFilter="${1#--filter=}"; ;;
     --setmode?(=*))   if [[ "$1" = "--setmode" ]]; then shift; fi
                       argMode="${1#--setmode=}"; ;;
+    --setdate?(=*))  if [[ "$1" = "--setdate" ]]; then shift; fi
+                     argDate="${1#--setdate=}"; ;;
     --anon*)          userName="spiffs"; groupName="Arduino"
                       userID=0; groupID=0; ;;
     --blocksize?(*=)) if [[ "$1" = "--blocksize" ]]; then shift; fi
@@ -449,7 +473,7 @@ logVarError() {
 if [[ -n ${argDebug} ]]; then
   logVarError argSource argTarget argHelp argListOnly argLong argError argUser \
    argGzip argFilter argMode argAnon argReplace userName groupName userID \
-   groupID argDebug
+   groupID argDate argDebug
 fi
 
 
@@ -464,6 +488,13 @@ if [[ -n ${argMode} ]]; then
   fi
 fi
 
+if [[ -z ${argDate} ]]; then
+  argDate=$(date +"%s")
+else
+  if ! validDecNumber "${argDate}"; then
+    argHelp=1; argError="${argError}\n--setdate bad value. The value should be a decimal number of seconds."
+  fi
+fi
 
 _Passwd="${argUser/*:/}"
 _User="${argUser/:*/}"
@@ -491,10 +522,10 @@ fi
 # fi
 
 if [[ -n ${argHelp} ]]; then
-  if [[ -n ${argError} ]]; then
-    echo -e "${argError}\n"
-  fi
-  printUsage
+  # if [[ -n ${argError} ]]; then
+  #   echo -e "${argError}\n"
+  # fi
+  printUsage | less
   errorExit 1
 fi
 
@@ -509,8 +540,7 @@ fi
 
 # if [[ "${argTarget:0:2}" = "~/" ]]; then
 if [[ "${argTarget:0:1}" = "~" ]]; then
-  eval target="${argTarget}"
-#  target=~/"${argTarget#\~/}"
+  eval tarFileName="${argTarget}"
   if [[ "${tarFileName:0:1}" = "~" ]]; then
     printFolded "***" "\n"\
       "This path expression, \"${argTarget}\", did not expand to a valid path."\
@@ -519,7 +549,7 @@ if [[ "${argTarget:0:1}" = "~" ]]; then
     errorExit 1
   fi
 elif [[ "${argTarget:0:2}" = "./" ]]; then
-  target="${argTarget#./}"
+  tarFileName="${argTarget#./}"
 # elif [[ "${argTarget:0:1}" = "~" ]]; then
 #   # ~~USER might be legal, however, it is more likely a typo so dissalow for now.
 #   if [[ "${argTarget}" =~ ^~[^~/][^/]*/[^/].*$ ]]; then
@@ -545,23 +575,20 @@ elif [[ "${argTarget:0:1}" = "/" ]]; then
     "Cannot use file specification starting at the root of the filesystem,"\
     "\"/\"."\
     "Please run command from or above the directory level you wish to create"\
-    "the archive directory."\
+    "the archive file."\
     "\n"
   errorExit 1
 else
-  target="${argTarget}"
+  tarFileName="${argTarget}"
 fi
 
 tarFileNameBase="${tarFileName%.*}"
 tarFileNameExt="${tarFileName##*.}"
-case "${tarFileNameExt}" in
-  tgz)   argGzip=tgz; ;;
-  tar)   unset argGzip; ;;
-  *)     echo "Please use a filename with an extension of \".tgz\" or \".tar\""
-         errorExit 1; ;;
-esac
-if [[ -n ${argGzip} ]]; then
+if [[ "${tarFileNameExt}" = "tgz" ]]; then
   tarFileName="${tarFileNameBase}.tar"
+  tarFileNameZ="${tarFileNameBase}.tgz"
+  argGzip="tgz";
+elif [[ -n "${argGzip}" ]]; then
   tarFileNameZ="${tarFileNameBase}.tgz"
 else
   unset tarFileNameZ
@@ -580,7 +607,7 @@ if [[ -f "${tarFileName}" ]]  ||
     [[ -f "${tarFileName}"    ]] && echo "  ${tarFileName}" >&2
     [[ -f "${tarFileNameZ}"   ]] && echo "  ${tarFileNameZ}" >&2
     [[ -f "${tarFileName}.gz" ]] && echo "  ${tarFileName}.gz" >&2
-    echo -n "\nWould you like to continue (yes/no)? " >&2
+    echo -e -n "\nWould you like to continue (yes/no)? " >&2
     unset yesno
     gotit=-1
     for (( i=12; (i>0)&&(${gotit}<0); i-=1 )); do
@@ -602,7 +629,7 @@ if [[ -f "${tarFileName}" ]]  ||
   [[ -f "${tarFileName}"    ]] && ! rm "${tarFileName}"     && gotit=0
   [[ -f "${tarFileNameZ}"   ]] && ! rm "${tarFileNameZ}"    && gotit=0
   [[ -f "${tarFileName}.gz" ]] && ! rm "${tarFileName}.gz"  && gotit=0
-  if [[ $gotit -lt 1 ]; then
+  if [[ $gotit -lt 1 ]]; then
     exit 1;
   fi
 fi
@@ -696,7 +723,6 @@ if [[ -n ${argListOnly} ]]; then
 fi
 
 
-#D tarFileName="${target}"
 #
 # Download files and build tar file
 #
@@ -732,6 +758,7 @@ for (( i=0; i<${#spiffsNames[@]}; i+=2 )); do
             "\n"
           errorExit 100
         fi
+      fi
       numFilesBackedUp=$(( ${numFilesBackedUp} + 1 ))
     else
       truncate -c -s +1024 "${tarFileName}" # two records of zeros
@@ -757,20 +784,11 @@ echo -e "Downloaded: ${numFilesBackedUp} of ${numOfFilesToBackup} files from ${a
 truncate -c -s +1024 "${tarFileName}" # two records of zeros
 truncate -c -s %${argBlockSize} "${tarFileName}"
 
-
-
-# Corner cases not handled yet
-
 if [[ -n ${argGzip} ]]; then
   gzip "${tarFileName}"
   mv ${tarFileName}.gz "${tarFileNameZ}"
+  tarFileName="${tarFileNameZ}"
 fi
-
-
-
-
-
-
 
 echo ""
 echo "Archive file \"${tarFileName}\" complete."

@@ -109,3 +109,23 @@ Usage:
       This usage message.
 
 ```
+This has been working under Ubuntu 18.
+
+I was successful running nar.sh under Windows 10 via the GIT Bash shell environment.
+
+These are the versions of the components I was using, when it worked on Windows 10:
+```
+jq-1.6
+
+git version 2.19.1.windows.1
+
+curl 7.61.1 (x86_64-w64-mingw32) libcurl/7.61.1 OpenSSL/1.0.2p (WinSSL) zlib/1.2.11 libidn2/2.0.5 nghttp2/1.33.0
+Release-Date: 2018-09-05
+Protocols: dict file ftp ftps gopher http https imap imaps ldap ldaps pop3 pop3s rtsp smtp smtps telnet tftp
+Features: AsynchDNS IDN IPv6 Largefile SSPI Kerberos SPNEGO NTLM SSL libz TLS-SRP HTTP2 HTTPS-proxy MultiSSL Metalink
+
+GNU bash, version 4.4.19(2)-release (x86_64-pc-msys)
+Copyright (C) 2016 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+```
+Note, JasonQuery, `jq` for Windows was renamed to `jq.exe` from `jq-win64.exe`. It must also be placed in an execution path that the bash shell can find.

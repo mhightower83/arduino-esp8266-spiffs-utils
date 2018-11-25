@@ -96,7 +96,7 @@ Usage:
 
     --filter=REGEX
       A regular expression filter to limit the files downloaded.
-      Use with "--long to confirm your selection.
+      Use with "--long" to confirm your selection.
 
     --replace (optional)
       Overwrite an old backup.
@@ -194,7 +194,7 @@ runcmd() {
 
 buildHttpText() {
   local _text
-  _text=$( echo -n "$1" | jq -R '@uri' )
+  _text=$( echo -n "$1" | jq -R '@uri' | tr -dc '[[:print:]]' )
   # Strip quotes and set
   eval ${2:-text}=${_text}
 }
@@ -230,6 +230,7 @@ sendHttpRequest() {
             "Check user name and password."
           return $rc
         fi
+        logError "cmd=curl -sS $1 \"${httprequest}\""
         logError "curl returned a null response on success."
         logError "Check user name and password."
       fi
@@ -329,7 +330,7 @@ printFolded() {
 
 make_spiffsNames() {
   local IFS=$'\n'
-  spiffsNames=( `cat ${tmpList} | jq -r '.[] | select(.type=="file") | .name,.size'` )
+  spiffsNames=( `cat ${tmpList} | jq -r '.[] | select(.type=="file") | .name,.size' | tr -d "\r"` )
 }
 
 # tarPrintOctal value fieldWidth
@@ -366,7 +367,7 @@ tarWriteHeader() {
   tarPrintOctal ${fileMode:-0664} 8
   tarPrintOctal ${userID:-${EUID}} 8
   tarPrintOctal ${groupID:-${GROUPS}} 8
-  tarPrintOctal ${fileSize} 12   # file size
+  tarPrintOctal ${fileSize} 12
   # Last modification time, defaults to now.
   tarPrintOctal ${argDate} 12
   # Checksum field needs blanks for calculating checksum.
@@ -599,7 +600,7 @@ if [[ -f "${tarFileName}" ]]  ||
    [[ -f "${tarFileName}.gz"  ]]; then
 
   if [[ -n ${argReplace} ]]; then
-    goit=1
+    gotit=1
   else
     echo -e "\n"\
       "If we continue, the following existing output and intermediate files\n"\
@@ -630,6 +631,9 @@ if [[ -f "${tarFileName}" ]]  ||
   [[ -f "${tarFileNameZ}"   ]] && ! rm "${tarFileNameZ}"    && gotit=0
   [[ -f "${tarFileName}.gz" ]] && ! rm "${tarFileName}.gz"  && gotit=0
   if [[ $gotit -lt 1 ]]; then
+    printFolded "***" "\n"\
+      "File deletion failed."\
+      "\n"
     exit 1;
   fi
 fi
